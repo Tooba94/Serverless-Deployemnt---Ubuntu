@@ -1,0 +1,239 @@
+Finally, you upgraded the API with timestamps, filtering, and stronger validation.
+8.1 Final serverless.yml
+org: visioncytechlab
+service: serverless1http
+
+provider:
+  name: aws
+  runtime: python3.12
+
+functions:
+  api:
+    handler: handler.api
+    events:
+      - httpApi:
+          path: /tasks
+          method: get
+      - httpApi:
+          path: /tasks
+          method: post
+      - httpApi:
+          path: /tasks/{id}
+          method: delete
+      - httpApi:
+          path: /tasks/{id}
+          method: patch
+
+plugins:
+  - serverless-offline
+8.2 Final handler.py
+import json
+import os
+from datetime import datetime
+
+FILE_NAME = "tasks.json"
+
+def read_tasks():
+    if not os.path.exists(FILE_NAME):
+        return []
+    with open(FILE_NAME, "r") as f:
+        return json.load(f)
+
+def write_tasks(tasks):
+    with open(FILE_NAME, "w") as f:
+        json.dump(tasks, f, indent=2)
+
+def now():
+    return datetime.utcnow().isoformat() + "Z"
+
+def api(event, context):
+    method = event.get("requestContext", {}).get("http", {}).get("method")
+    path_params = event.get("pathParameters") or {}
+    query_params = event.get("queryStringParameters") or {}
+
+    tasks = read_tasks()
+
+    if method == "GET":
+        done_filter = query_params.get("done")
+
+        if done_filter is not None:
+            if done_filter.lower() == "true":
+                filtered_tasks = [task for task in tasks if task.get("done") is True]
+            elif done_filter.lower() == "false":
+                filtered_tasks = [task for task in tasks if task.get("done") is False]
+            else:
+                return {
+                    "statusCode": 400,
+                    "body": json.dumps({"error": "done must be true or false"})
+                }
+        else:
+            filtered_tasks = tasks
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps({
+                "message": "Tasks fetched successfully",
+                "count": len(filtered_tasks),
+                "tasks": filtered_tasks
+            })
+        }
+
+    if method == "POST":
+        try:
+            body = json.loads(event.get("body", "{}"))
+        except json.JSONDecodeError:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Invalid JSON"})
+            }
+
+        title = body.get("title")
+
+        if not title or not str(title).strip():
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Title is required"})
+            }
+
+        new_id = max([task["id"] for task in tasks], default=0) + 1
+        timestamp = now()
+
+        new_task = {
+            "id": new_id,
+            "title": str(title).strip(),
+            "done": False,
+            "created_at": timestamp,
+            "updated_at": timestamp
+        }
+
+        tasks.append(new_task)
+        write_tasks(tasks)
+
+        return {
+            "statusCode": 201,
+            "body": json.dumps({
+                "message": "Task added successfully",
+                "task": new_task
+            })
+        }
+
+    if method == "DELETE":
+        try:
+            task_id = int(path_params.get("id"))
+        except (TypeError, ValueError):
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Invalid task id"})
+            }
+
+        deleted_task = None
+        new_tasks = []
+
+        for task in tasks:
+            if task["id"] == task_id:
+                deleted_task = task
+            else:
+                new_tasks.append(task)
+
+        if deleted_task is None:
+            return {
+                "statusCode": 404,
+                "body": json.dumps({"error": "Task not found"})
+            }
+
+        write_tasks(new_tasks)
+
+        return {
+            "statusCode": 200,
+            "body": json.dumps({
+                "message": "Task deleted successfully",
+                "task": deleted_task
+            })
+        }
+
+    if method == "PATCH":
+        try:
+            task_id = int(path_params.get("id"))
+        except (TypeError, ValueError):
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Invalid task id"})
+            }
+
+        try:
+            body = json.loads(event.get("body", "{}"))
+        except json.JSONDecodeError:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Invalid JSON"})
+            }
+
+        allowed_fields = {"title", "done"}
+        provided_fields = set(body.keys())
+
+        if not provided_fields:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Provide at least one field to update"})
+            }
+
+        invalid_fields = provided_fields - allowed_fields
+        if invalid_fields:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({
+                    "error": "Invalid fields provided",
+                    "invalid_fields": list(invalid_fields)
+                })
+            }
+
+        for task in tasks:
+            if task["id"] == task_id:
+                if "title" in body:
+                    if not str(body["title"]).strip():
+                        return {
+                            "statusCode": 400,
+                            "body": json.dumps({"error": "Title cannot be empty"})
+                        }
+                    task["title"] = str(body["title"]).strip()
+
+                if "done" in body:
+                    if not isinstance(body["done"], bool):
+                        return {
+                            "statusCode": 400,
+                            "body": json.dumps({"error": "done must be true or false"})
+                        }
+                    task["done"] = body["done"]
+
+                task["updated_at"] = now()
+                write_tasks(tasks)
+
+                return {
+                    "statusCode": 200,
+                    "body": json.dumps({
+                        "message": "Task updated successfully",
+                        "task": task
+                    })
+                }
+
+        return {
+            "statusCode": 404,
+            "body": json.dumps({"error": "Task not found"})
+        }
+
+    return {
+        "statusCode": 405,
+        "body": json.dumps({"error": "Method not allowed"})
+    }
+Useful final test commands:
+curl http://localhost:3000/tasks
+
+curl -X POST http://localhost:3000/tasks -H "Content-Type: application/json" -d '{"title":"Learn next level serverless"}'
+
+curl -X PATCH http://localhost:3000/tasks/1 -H "Content-Type: application/json" -d '{"done": true}'
+
+curl "http://localhost:3000/tasks?done=true"
+
+curl "http://localhost:3000/tasks?done=false"
+
+curl -X DELETE http://localhost:3000/tasks/1
