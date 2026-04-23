@@ -1,0 +1,27 @@
+At the beginning, the main files were serverless.yml and handler.py.
+3.1 Initial serverless.yml
+org: visioncytechlab
+service: serverless1http
+
+provider:
+  name: aws
+  runtime: python3.12
+
+functions:
+  hello:
+    handler: handler.hello
+    events:
+      - httpApi:
+          path: /
+          method: get
+3.2 Initial handler.py
+import json
+
+def hello(event, context):
+    return {
+        "statusCode": 200,
+        "body": json.dumps({"message": "Hello from Serverless!"})
+    }
+You verified the project files with commands like:
+ls
+cat serverless.yml
