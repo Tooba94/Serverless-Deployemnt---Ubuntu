@@ -1,0 +1,120 @@
+Next, you replaced the single GET endpoint with task routes:
+•	GET /tasks
+•	POST /tasks
+•	DELETE /tasks/{id}
+You also changed the function name from hello to api.
+5.1 serverless.yml for CRUD basics
+org: visioncytechlab
+service: serverless1http
+
+provider:
+  name: aws
+  runtime: python3.12
+
+functions:
+  api:
+    handler: handler.api
+    events:
+      - httpApi:
+          path: /tasks
+          method: get
+      - httpApi:
+          path: /tasks
+          method: post
+      - httpApi:
+          path: /tasks/{id}
+          method: delete
+
+plugins:
+  - serverless-offline
+5.2 handler.py for basic in-memory CRUD
+import json
+
+tasks = [
+    {"id": 1, "title": "Learn Serverless", "done": False},
+    {"id": 2, "title": "Build first Python app", "done": False}
+]
+
+def api(event, context):
+    method = event.get("requestContext", {}).get("http", {}).get("method")
+    path_params = event.get("pathParameters") or {}
+
+    if method == "GET":
+        return {
+            "statusCode": 200,
+            "body": json.dumps({
+                "message": "Tasks fetched successfully",
+                "tasks": tasks
+            })
+        }
+
+    if method == "POST":
+        try:
+            body = json.loads(event.get("body", "{}"))
+            title = body.get("title")
+
+            if not title:
+                return {
+                    "statusCode": 400,
+                    "body": json.dumps({"error": "Title is required"})
+                }
+
+            new_id = max([task["id"] for task in tasks], default=0) + 1
+            new_task = {
+                "id": new_id,
+                "title": title,
+                "done": False
+            }
+            tasks.append(new_task)
+
+            return {
+                "statusCode": 201,
+                "body": json.dumps({
+                    "message": "Task added successfully",
+                    "task": new_task
+                })
+            }
+
+        except json.JSONDecodeError:
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Invalid JSON"})
+            }
+
+    if method == "DELETE":
+        try:
+            task_id = int(path_params.get("id"))
+        except (TypeError, ValueError):
+            return {
+                "statusCode": 400,
+                "body": json.dumps({"error": "Invalid task id"})
+            }
+
+        for task in tasks:
+            if task["id"] == task_id:
+                tasks.remove(task)
+                return {
+                    "statusCode": 200,
+                    "body": json.dumps({
+                        "message": "Task deleted successfully",
+                        "task": task
+                    })
+                }
+
+        return {
+            "statusCode": 404,
+            "body": json.dumps({"error": "Task not found"})
+        }
+
+    return {
+        "statusCode": 405,
+        "body": json.dumps({"error": "Method not allowed"})
+    }
+Run the project locally:
+serverless offline
+Test commands:
+curl http://localhost:3000/tasks
+
+curl -X POST http://localhost:3000/tasks -H "Content-Type: application/json" -d '{"title":"Practice Serverless API"}'
+
+curl -X DELETE http://localhost:3000/tasks/1
