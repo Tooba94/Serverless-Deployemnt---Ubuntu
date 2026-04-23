@@ -1,0 +1,8 @@
+Create a working directory and start the Serverless wizard:
+mkdir my-serverless-app
+cd my-serverless-app
+serverless
+•	Template selected: AWS / Python / HTTP API
+•	App selection: Skip Adding An App
+•	AWS setup: Skip & Set Later
+This created the initial project folder, such as serverless1http/.
