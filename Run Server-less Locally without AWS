@@ -1,0 +1,28 @@
+Because AWS account setup was not available, you used serverless-offline for local practice.
+Install the local plugin:
+npm init -y
+npm install serverless-offline
+Then update serverless.yml by adding the plugins section.
+4.1 serverless.yml after adding serverless-offline
+org: visioncytechlab
+service: serverless1http
+
+provider:
+  name: aws
+  runtime: python3.12
+
+functions:
+  hello:
+    handler: handler.hello
+    events:
+      - httpApi:
+          path: /
+          method: get
+
+plugins:
+  - serverless-offline
+Start the local server:
+serverless offline
+Open in browser:
+http://localhost:3000
+Note: At this stage, the local GET endpoint returned a basic response such as Hello from Serverless or GET working.
